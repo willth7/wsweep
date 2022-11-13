@@ -15,13 +15,14 @@
 #include <wayland-client.h>
 #include "xdg-shell-client-protocol.h"
 
-#include <stdlib.h>
 #include <stdint.h>
+#include <stdio.h>
 
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <sys/random.h>
 
 struct wl_display* disp;
 struct wl_registry* reg;
@@ -51,10 +52,11 @@ uint8_t mx;
 uint8_t my;
 
 void field_init() {
-	srand(img);
 	for (uint16_t n = m; n;) {
-		uint8_t x = rand();
-		uint8_t y = rand();
+		uint8_t x;
+		getrandom(&x, 1, 0);
+		uint8_t y;
+		getrandom(&y, 1, 0);
 		if (x < w && y < h && *(f + (y * w) + x) != 9) {
 			*(f + (y * w) + x) = 9;
 			n--;
@@ -87,45 +89,88 @@ void field_init() {
 	}
 }
 
+void field_deft() {
+	g = 0;
+	for (uint8_t y = 0; y < h; y++) {
+		for (uint8_t x = 0; x < w; x++) {
+			if (*(f + (y * w) + x) == 9) {
+				*(f + (y * w) + x) = 41;
+			}
+			else if ((*(f + (y * w) + x) & 48) == 16 && (*(f + (y * w) + x) & 15) != 9) {
+				*(f + (y * w) + x) = 48;
+			}
+		}
+	}
+}
+
 void field_test(uint8_t x, uint8_t y) {
 	if (*(f + (y * w) + x) == 0) {
 		*(f + (y * w) + x) += 32;
+	}
+	else if (*(f + (y * w) + x) == 9) {
+		field_deft();
+		return;
 	}
 	else if ((*(f + (y * w) + x) & 48) == 0) {
 		*(f + (y * w) + x) += 32;
 		return;
 	}
-	else {
+	else if ((*(f + (y * w) + x) & 48) == 32) {
+		uint8_t a = 0;
+		if (x > 0 && (*(f + (y * w) + (x - 1)) & 48) == 16) {
+			a += 1;
+		}
+		if (y > 0 && (*(f + ((y - 1) * w) + x) & 48) == 16) {
+			a += 1;
+		}
+		if (x + 1 < w && (*(f + (y * w) + (x + 1)) & 48) == 16) {
+			a += 1;
+		}
+		if (y + 1 < h && (*(f + ((y + 1) * w) + x) & 48) == 16) {
+			a += 1;
+		}
+		if (x > 0 && y > 0 && (*(f + ((y - 1) * w) + (x - 1)) & 48) == 16) {
+			a += 1;
+		}
+		if (x > 0 && y + 1 < h && (*(f + ((y + 1) * w) + (x - 1)) & 48) == 16) {
+			a += 1;
+		}
+		if (x + 1 < w && y > 0 && (*(f + ((y - 1) * w) + (x + 1)) & 48) == 16) {
+			a += 1;
+		}
+		if (x + 1 < w && y + 1 < h && (*(f + ((y + 1) * w) + (x + 1)) & 48) == 16) {
+			a += 1;
+		}
+		
+		if ((*(f + (y * w) + x) & 15) == a) {
+			if (x > 0 && (*(f + (y * w) + (x - 1)) & 48) == 0) {
+				field_test(x - 1, y);
+			}
+			if (y > 0 && (*(f + ((y - 1) * w) + x) & 48) == 0) {
+				field_test(x, y - 1);
+			}
+			if (x + 1 < w && (*(f + (y * w) + (x + 1)) & 48) == 0) {
+				field_test(x + 1, y);
+			}
+			if (y + 1 < h && (*(f + ((y + 1) * w) + x) & 48) == 0) {
+				field_test(x, y + 1);
+			}
+			if (x > 0 && y > 0 && (*(f + ((y - 1) * w) + (x - 1)) & 48) == 0) {
+				field_test(x - 1, y - 1);
+			}
+			if (x > 0 && y + 1 < h && (*(f + ((y + 1) * w) + (x - 1)) & 48) == 0) {
+				field_test(x - 1, y + 1);
+			}
+			if (x + 1 < w && y > 0 && (*(f + ((y - 1) * w) + (x + 1)) & 48) == 0) {
+				field_test(x + 1, y - 1);
+			}
+			if (x + 1 < w && y + 1 < h && (*(f + ((y + 1) * w) + (x + 1)) & 48) == 0) {
+				field_test(x + 1, y + 1);
+			}
+		}
 		return;
 	}
-	
-	uint8_t a = 0;
-	if (x > 0 && (*(f + (y * w) + (x - 1)) & 48) == 16) {
-		a += 1;
-	}
-	if (y > 0 && (*(f + ((y - 1) * w) + x) & 48) == 16) {
-		a += 1;
-	}
-	if (x + 1 < w && (*(f + (y * w) + (x + 1)) & 48) == 16) {
-		a += 1;
-	}
-	if (y + 1 < h && (*(f + ((y + 1) * w) + x) & 48) == 16) {
-		a += 1;
-	}
-	if (x > 0 && y > 0 && (*(f + ((y - 1) * w) + (x - 1)) & 48) == 16) {
-		a += 1;
-	}
-	if (x > 0 && y + 1 < h && (*(f + ((y + 1) * w) + (x - 1)) & 48) == 16) {
-		a += 1;
-	}
-	if (x + 1 < w && y > 0 && (*(f + ((y - 1) * w) + (x + 1)) & 48) == 16) {
-		a += 1;
-	}
-	if (x + 1 < w && y + 1 < h && (*(f + ((y + 1) * w) + (x + 1)) & 48) == 16) {
-		a += 1;
-	}
-	
-	if ((*(f + (y * w) + x) & 15) != 0 || (*(f + (y * w) + x) & 15) != a) {
+	else {
 		return;
 	}
 	
@@ -152,20 +197,6 @@ void field_test(uint8_t x, uint8_t y) {
 	}
 	if (x + 1 < w && y + 1 < h) {
 		field_test(x + 1, y + 1);
-	}
-}
-
-void field_lose() {
-	g = 0;
-	for (uint8_t y = 0; y < h; y++) {
-		for (uint8_t x = 0; x < w; x++) {
-			if (*(f + (y * w) + x) == 9) {
-				*(f + (y * w) + x) = 41;
-			}
-			else if ((*(f + (y * w) + x) & 48) == 16 && (*(f + (y * w) + x) & 15) != 9) {
-				*(f + (y * w) + x) = 48;
-			}
-		}
 	}
 }
 
@@ -214,7 +245,9 @@ int32_t alc_shm(uint64_t sz) {
 	name[0] = '/';
 	name[7] = 0;
 	for (uint8_t i = 1; i < 6; i++) {
-		name[i] = (rand() & 23) + 97;
+		uint8_t r;
+		getrandom(&r, 1, 0);
+		name[i] = (r & 23) + 97;
 	}
 	
 	int32_t fd = shm_open(name, O_RDWR | O_CREAT | O_EXCL, S_IWUSR | S_IRUSR | S_IWOTH | S_IROTH);
@@ -412,10 +445,7 @@ void ms_button(void* data, struct wl_pointer* ms, uint32_t ser, uint32_t t, uint
 	if (!g) {
 		return;
 	}
-	if (but == 272 && !stat && *(f + (my * w) + mx) == 9) {
-		field_lose();
-	}
-	else if (but == 272 && !stat && (*(f + (my * w) + mx) & 16) == 0) {
+	if (but == 272 && !stat && (*(f + (my * w) + mx) & 16) == 0) {
 		field_test(mx, my);
 	}
 	else if (but == 273 && !stat && (*(f + (my * w) + mx) & 48) == 0) {
@@ -507,6 +537,9 @@ int8_t main(int32_t argc, int8_t** argv) {
 		h = str_int(argv[2]);
 		m = str_int(argv[3]);
 	}
+	if (m > w * h) {
+		return -1;
+	}
 	
 	img = bmp_read("img/atlas.bmp");
 	f = mmap(0, w * h * 4, PROT_WRITE | PROT_READ, MAP_SHARED, alc_shm(w * h * 4), 0);
@@ -525,7 +558,7 @@ int8_t main(int32_t argc, int8_t** argv) {
 	xdg_surface_add_listener(xrfc, &xrfc_list, 0);
 	top = xdg_surface_get_toplevel(xrfc);
 	xdg_toplevel_add_listener(top, &top_list, 0);
-	//xdg_toplevel_set_title(top, "wayland client");
+	xdg_toplevel_set_title(top, "wsweep");
 	xdg_toplevel_set_min_size(top, w, h);
 	xdg_toplevel_set_max_size(top, w, h);
 	wl_surface_commit(srfc);
