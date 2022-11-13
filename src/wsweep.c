@@ -17,8 +17,6 @@
 
 #include <stdlib.h>
 #include <stdint.h>
-#include <string.h>
-#include <stdio.h>
 
 #include <unistd.h>
 #include <fcntl.h>
@@ -40,13 +38,7 @@ struct xdg_toplevel* top;
 struct wl_keyboard* kb;
 struct wl_pointer* ms;
 
-typedef struct img_s {
-	uint8_t* pix;
-	uint32_t w;
-	uint32_t h;
-} img_t;
-
-img_t* img;
+uint8_t* img;
 uint8_t* pixl;
 uint8_t* f;
 uint16_t m;
@@ -95,6 +87,74 @@ void field_init() {
 	}
 }
 
+void field_test(uint8_t x, uint8_t y) {
+	if (*(f + (y * w) + x) == 0) {
+		*(f + (y * w) + x) += 32;
+	}
+	else if ((*(f + (y * w) + x) & 48) == 0) {
+		*(f + (y * w) + x) += 32;
+		return;
+	}
+	else {
+		return;
+	}
+	
+	uint8_t a = 0;
+	if (x > 0 && (*(f + (y * w) + (x - 1)) & 48) == 16) {
+		a += 1;
+	}
+	if (y > 0 && (*(f + ((y - 1) * w) + x) & 48) == 16) {
+		a += 1;
+	}
+	if (x + 1 < w && (*(f + (y * w) + (x + 1)) & 48) == 16) {
+		a += 1;
+	}
+	if (y + 1 < h && (*(f + ((y + 1) * w) + x) & 48) == 16) {
+		a += 1;
+	}
+	if (x > 0 && y > 0 && (*(f + ((y - 1) * w) + (x - 1)) & 48) == 16) {
+		a += 1;
+	}
+	if (x > 0 && y + 1 < h && (*(f + ((y + 1) * w) + (x - 1)) & 48) == 16) {
+		a += 1;
+	}
+	if (x + 1 < w && y > 0 && (*(f + ((y - 1) * w) + (x + 1)) & 48) == 16) {
+		a += 1;
+	}
+	if (x + 1 < w && y + 1 < h && (*(f + ((y + 1) * w) + (x + 1)) & 48) == 16) {
+		a += 1;
+	}
+	
+	if ((*(f + (y * w) + x) & 15) != 0 || (*(f + (y * w) + x) & 15) != a) {
+		return;
+	}
+	
+	if (x > 0) {
+		field_test(x - 1, y);
+	}
+	if (y > 0) {
+		field_test(x, y - 1);
+	}
+	if (x + 1 < w) {
+		field_test(x + 1, y);
+	}
+	if (y + 1 < h) {
+		field_test(x, y + 1);
+	}
+	if (x > 0 && y > 0) {
+		field_test(x - 1, y - 1);
+	}
+	if (x > 0 && y + 1 < h) {
+		field_test(x - 1, y + 1);
+	}
+	if (x + 1 < w && y > 0) {
+		field_test(x + 1, y - 1);
+	}
+	if (x + 1 < w && y + 1 < h) {
+		field_test(x + 1, y + 1);
+	}
+}
+
 void field_lose() {
 	g = 0;
 	for (uint8_t y = 0; y < h; y++) {
@@ -109,48 +169,44 @@ void field_lose() {
 	}
 }
 
-img_t* img_init_raw(uint32_t w, uint32_t h, uint8_t* data) {
-	img_t* img = malloc(sizeof(img_t));
-	img->pix = malloc(32 * w * h);
-	uint32_t indx = 0;
-	for (uint32_t hi = 0; hi < h; hi++) {
-		for (uint32_t wi = 0; wi < w; wi++) {
-			*(img->pix + (hi * w * 4) + (wi * 4)) = *(data + indx + 2);
-			*(img->pix + (hi * w * 4) + (wi * 4) + 1) = *(data + indx + 1);
-			*(img->pix + (hi * w * 4) + (wi * 4) + 2) = *(data + indx);
-			*(img->pix + (hi * w * 4) + (wi * 4) + 3) = *(data + indx + 3);
-			indx += 4;
+uint64_t str_int(int8_t* a) {
+	uint64_t b = 0;
+	for(uint8_t i = 0; i < 20; i++) {
+		if (a[i] == 0 || a[i] == ')') {
+			return b;
+		}
+		b *= 10;
+		if (a[i] == '1') {
+			b += 1;
+		}
+		else if (a[i] == '2') {
+			b += 2;
+		}
+		else if (a[i] == '3') {
+			b += 3;
+		}
+		else if (a[i] == '4') {
+			b += 4;
+		}
+		else if (a[i] == '5') {
+			b += 5;
+		}
+		else if (a[i] == '6') {
+			b += 6;
+		}
+		else if (a[i] == '7') {
+			b += 7;
+		}
+		else if (a[i] == '8') {
+			b += 8;
+		}
+		else if (a[i] == '9') {
+			b += 9;
+		}
+		else if (a[i] != '0' && a[i] != ')') {
+			return -1;
 		}
 	}
-	img->w = w;
-	img->h = h;
-	return img;
-}
-
-void img_clr(img_t* img) {
-	free(img->pix);
-	free(img);
-}
-
-img_t* bmp_read(int8_t* path) {
-	FILE* f = fopen(path, "r");
-	if (f == 0) {
-		return 0;
-	}
-	fseek(f, 0, SEEK_END);
-	uint64_t bytesz = ftell(f);
-	uint8_t* data = malloc(bytesz);
-	fseek(f, 0, SEEK_SET);
-	fread(data, bytesz, 1, f);
-	fclose(f);
-	if (*data != 66 || *(data + 1) != 77) return 0;
-	uint8_t off = *(data + 10) + (*(data + 11) << 8) + (*(data + 12) << 16) + (*(data + 13) << 24);
-	uint32_t w = *(data + 18) + (*(data + 19) << 8) + (*(data + 20) << 16) + (*(data + 21) << 24);
-	uint32_t h = *(data + 22) + (*(data + 23) << 8) + (*(data + 24) << 16) + (*(data + 25) << 24);
-	uint16_t bpp = *(data + 28) + (*(data + 29) << 8);
-	img_t* img = img_init_raw(w, h, data + off);
-	free(data);
-	return img;
 }
 
 int32_t alc_shm(uint64_t sz) {
@@ -166,6 +222,54 @@ int32_t alc_shm(uint64_t sz) {
 	ftruncate(fd, sz);
 
 	return fd;
+}
+
+uint8_t* bmp_read(int8_t* path) {
+	int32_t fd = open(path, O_RDONLY);
+	if (fd == -1) {
+		return 0;
+	}
+	
+	struct stat fs;
+	fstat(fd, &fs);
+	
+	uint8_t* data = mmap(0, fs.st_size, PROT_READ, MAP_SHARED, fd, 0);
+	close(fd);
+	
+	if (*data != 66 || *(data + 1) != 77) {
+		return 0;
+	}
+	
+	uint16_t off = *(data + 10) + (*(data + 11) << 8) + (*(data + 12) << 16) + (*(data + 13) << 24);
+	uint16_t w = *(data + 18) + (*(data + 19) << 8) + (*(data + 20) << 16) + (*(data + 21) << 24);
+	uint16_t h = *(data + 22) + (*(data + 23) << 8) + (*(data + 24) << 16) + (*(data + 25) << 24);
+	uint16_t bpp = *(data + 28) + (*(data + 29) << 8);
+	
+	fd = alc_shm(w * h * 4);
+	uint8_t* img = mmap(0, w * h * 4, PROT_WRITE | PROT_READ, MAP_SHARED, fd, 0);
+	for (uint16_t y = 0; y < h; y++) {
+		for (uint16_t x = 0; x < w; x++) {
+			*(img + (y * w * 4) + (x * 4) + 0) = *(data + off + 0);
+			*(img + (y * w * 4) + (x * 4) + 1) = *(data + off + 1);
+			*(img + (y * w * 4) + (x * 4) + 2) = *(data + off + 2);
+			*(img + (y * w * 4) + (x * 4) + 3) = *(data + off + 3);
+			off += 4;
+		}
+	}
+	
+	munmap(data, fs.st_size);
+	return img;
+}
+
+uint8_t str_cmp(int8_t* a, int8_t* b) {
+	for (uint32_t i = 0; 1; i++) {
+		if (a[i] == 0 && b[i] == 0) {
+			return 1;
+		}
+		else if (a[i] != b[i]) {
+			return 0;
+		}
+	}
 }
 
 void resz() {
@@ -200,10 +304,10 @@ void draw() {
 				z = (*(f + ((y / 20) * w) + (x / 20)) & 15) * 20;
 			}
 			
-			*(pixl + (y * w * 80) + (x * 4) + 0) = *(img->pix + ((19 - (y % 20)) * img->w * 4) + (((x % 20) + z) * 4) + 2);
-			*(pixl + (y * w * 80) + (x * 4) + 1) = *(img->pix + ((19 - (y % 20)) * img->w * 4) + (((x % 20) + z) * 4) + 1);
-			*(pixl + (y * w * 80) + (x * 4) + 2) = *(img->pix + ((19 - (y % 20)) * img->w * 4) + (((x % 20) + z) * 4) + 0);
-			*(pixl + (y * w * 80) + (x * 4) + 3) = 255;
+			*(pixl + (y * w * 80) + (x * 4) + 0) = *(img + ((19 - (y % 20)) * 260 * 4) + (((x % 20) + z) * 4) + 0);
+			*(pixl + (y * w * 80) + (x * 4) + 1) = *(img + ((19 - (y % 20)) * 260 * 4) + (((x % 20) + z) * 4) + 1);
+			*(pixl + (y * w * 80) + (x * 4) + 2) = *(img + ((19 - (y % 20)) * 260 * 4) + (((x % 20) + z) * 4) + 2);
+			*(pixl + (y * w * 80) + (x * 4) + 3) = *(img + ((19 - (y % 20)) * 260 * 4) + (((x % 20) + z) * 4) + 3);
 		}
 	}
 	
@@ -311,8 +415,8 @@ void ms_button(void* data, struct wl_pointer* ms, uint32_t ser, uint32_t t, uint
 	if (but == 272 && !stat && *(f + (my * w) + mx) == 9) {
 		field_lose();
 	}
-	else if (but == 272 && !stat && (*(f + (my * w) + mx) & 48) == 0) {
-		*(f + (my * w) + mx) += 32;
+	else if (but == 272 && !stat && (*(f + (my * w) + mx) & 16) == 0) {
+		field_test(mx, my);
 	}
 	else if (but == 273 && !stat && (*(f + (my * w) + mx) & 48) == 0) {
 		*(f + (my * w) + mx) += 16;
@@ -368,17 +472,17 @@ struct wl_seat_listener seat_list = {
 };
 
 void reg_glob(void* data, struct wl_registry* reg, uint32_t name, int8_t* intf, uint32_t v) {
-	if (!strcmp(intf, wl_compositor_interface.name)) {
+	if (str_cmp(intf, wl_compositor_interface.name)) {
 		comp = wl_registry_bind(reg, name, &wl_compositor_interface, 4);
 	}
-	else if (!strcmp(intf, wl_shm_interface.name)) {
+	else if (str_cmp(intf, wl_shm_interface.name)) {
 		shm = wl_registry_bind(reg, name, &wl_shm_interface, 1);
 	}
-	else if (!strcmp(intf, xdg_wm_base_interface.name)) {
+	else if (str_cmp(intf, xdg_wm_base_interface.name)) {
 		sh = wl_registry_bind(reg, name, &xdg_wm_base_interface, 1);
 		xdg_wm_base_add_listener(sh, &sh_list, 0);
 	}
-	else if (!strcmp(intf, wl_seat_interface.name)) {
+	else if (str_cmp(intf, wl_seat_interface.name)) {
 		seat = wl_registry_bind(reg, name, &wl_seat_interface, 1);
 		wl_seat_add_listener(seat, &seat_list, 0);
 	}
@@ -394,11 +498,18 @@ struct wl_registry_listener reg_list = {
 };
 
 int8_t main(int32_t argc, int8_t** argv) {
-	img = bmp_read("img/atlas.bmp");
 	w = 16;
-	h = 9;
-	m = 20;
-	f = calloc(w * h, 1);
+	h = 8;
+	m = 24;
+	
+	if (argc == 4) {
+		w = str_int(argv[1]);
+		h = str_int(argv[2]);
+		m = str_int(argv[3]);
+	}
+	
+	img = bmp_read("img/atlas.bmp");
+	f = mmap(0, w * h * 4, PROT_WRITE | PROT_READ, MAP_SHARED, alc_shm(w * h * 4), 0);
 	field_init();
 	
 	disp = wl_display_connect(0);
@@ -437,7 +548,7 @@ int8_t main(int32_t argc, int8_t** argv) {
 	wl_seat_release(seat);
 	wl_display_disconnect(disp);
 	
-	free(f);
-	img_clr(img);
+	munmap(f, w * h * 4);
+	munmap(img, 20800);
 	return 0;
 }
