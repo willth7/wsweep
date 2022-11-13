@@ -42,7 +42,8 @@ struct wl_pointer* ms;
 uint8_t* img;
 uint8_t* pixl;
 uint8_t* f;
-uint16_t m;
+int16_t m;
+int16_t n;
 uint8_t w;
 uint8_t h;
 uint8_t g = 1;
@@ -50,8 +51,17 @@ uint8_t cls = 0;
 
 uint8_t mx;
 uint8_t my;
+uint64_t k[3];
+uint8_t l;
+uint8_t tab;
 
 void field_init() {
+	if (m > w * h) {
+		m = w * h;
+	}
+	xdg_toplevel_set_min_size(top, w, h);
+	xdg_toplevel_set_max_size(top, w, h);
+	f = mmap(0, w * h, PROT_WRITE | PROT_READ, MAP_SHARED, alc_shm(w * h), 0);
 	for (uint16_t n = m; n;) {
 		uint8_t x;
 		getrandom(&x, 1, 0);
@@ -87,6 +97,21 @@ void field_init() {
 			}
 		}
 	}
+	n = m;
+	g = 1;
+}
+
+void field_vict() {
+	g = 0;
+	for (uint8_t y = 0; y < h; y++) {
+		for (uint8_t x = 0; x < w; x++) {
+			if ((*(f + (y * w) + x) & 48) == 0) {
+				*(f + (y * w) + x) += 32;
+			}
+		}
+	}
+	uint64_t c = 2603;
+	write(0, &c, 2);
 }
 
 void field_deft() {
@@ -101,6 +126,8 @@ void field_deft() {
 			}
 		}
 	}
+	uint64_t c = 2605;
+	write(0, &c, 2);
 }
 
 void field_test(uint8_t x, uint8_t y) {
@@ -406,8 +433,43 @@ void kb_leave(void* data, struct wl_keyboard* kb, uint32_t ser, struct wl_surfac
 }
 
 void kb_key(void* data, struct wl_keyboard* kb, uint32_t ser, uint32_t t, uint32_t key, uint32_t stat) {
-	if (key == 1) {
+	if (!stat && key == 1) {
 		cls = 1;
+	}
+	else if (!stat && key == 15) {
+		if (tab) {
+			tab = 0;
+		}
+		else {
+			tab = 1;
+		}
+	}
+	else if (!stat && tab && key > 1 && key < 11) {
+		k[l] = (key - 1) + (k[l] * 10);
+	}
+	else if (!stat && tab && key == 11) {
+		k[l] = k[l] * 10;
+	}
+	else if (!stat && tab && key == 28) {
+		if (l == 0) {
+			l += 1;
+		}
+		else if (l == 1) {
+			l += 1;
+		}
+		else if (l == 2) {
+			munmap(f, w * h);
+			l = 0;
+			w = k[0];
+			h = k[1];
+			m = k[2];
+			resz();
+			k[0] = 0;
+			k[1] = 0;
+			k[2] = 0;
+			field_init();
+			tab = 0;
+		}
 	}
 }
 
@@ -450,9 +512,23 @@ void ms_button(void* data, struct wl_pointer* ms, uint32_t ser, uint32_t t, uint
 	}
 	else if (but == 273 && !stat && (*(f + (my * w) + mx) & 48) == 0) {
 		*(f + (my * w) + mx) += 16;
+		n -= 1;
+		if ((*(f + (my * w) + mx) & 15) == 9) {
+			m -= 1;
+		}
+		if (!m && !n) {
+			field_vict();
+		}
 	}
 	else if (but == 273 && !stat && (*(f + (my * w) + mx) & 48) == 16) {
 		*(f + (my * w) + mx) -= 16;
+		n += 1;
+		if ((*(f + (my * w) + mx) & 15) == 9) {
+			m += 1;
+		}
+		if (!m && !n) {
+			field_vict();
+		}
 	}
 }
 
@@ -537,13 +613,8 @@ int8_t main(int32_t argc, int8_t** argv) {
 		h = str_int(argv[2]);
 		m = str_int(argv[3]);
 	}
-	if (m > w * h) {
-		return -1;
-	}
 	
 	img = bmp_read("img/atlas.bmp");
-	f = mmap(0, w * h * 4, PROT_WRITE | PROT_READ, MAP_SHARED, alc_shm(w * h * 4), 0);
-	field_init();
 	
 	disp = wl_display_connect(0);
 	reg = wl_display_get_registry(disp);
@@ -559,14 +630,14 @@ int8_t main(int32_t argc, int8_t** argv) {
 	top = xdg_surface_get_toplevel(xrfc);
 	xdg_toplevel_add_listener(top, &top_list, 0);
 	xdg_toplevel_set_title(top, "wsweep");
-	xdg_toplevel_set_min_size(top, w, h);
-	xdg_toplevel_set_max_size(top, w, h);
 	wl_surface_commit(srfc);
 	
 	kb = wl_seat_get_keyboard(seat);
 	wl_keyboard_add_listener(kb, &kb_list, 0);
 	ms = wl_seat_get_pointer(seat);
 	wl_pointer_add_listener(ms, &ms_list, 0);
+	
+	field_init();
 	
 	while (!cls) {
 		wl_display_dispatch(disp);
@@ -581,7 +652,8 @@ int8_t main(int32_t argc, int8_t** argv) {
 	wl_seat_release(seat);
 	wl_display_disconnect(disp);
 	
-	munmap(f, w * h * 4);
+	munmap(f, w * h);
+	munmap(pixl, (w * 20) * (h * 20) * 4);
 	munmap(img, 20800);
 	return 0;
 }
