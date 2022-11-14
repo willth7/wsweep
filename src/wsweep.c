@@ -16,7 +16,6 @@
 #include "xdg-shell-client-protocol.h"
 
 #include <stdint.h>
-#include <stdio.h>
 
 #include <unistd.h>
 #include <fcntl.h>
@@ -448,7 +447,10 @@ void kb_key(void* data, struct wl_keyboard* kb, uint32_t ser, uint32_t t, uint32
 		k[l] = (key - 1) + (k[l] * 10);
 	}
 	else if (!stat && tab && key == 11) {
-		k[l] = k[l] * 10;
+		k[l] *= 10;
+	}
+	else if (!stat && tab && key == 14) {
+		k[l] /= 10;
 	}
 	else if (!stat && tab && key == 28) {
 		if (l == 0) {
