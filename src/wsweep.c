@@ -111,6 +111,7 @@ void field_vict() {
 	}
 	uint64_t c = 2603;
 	write(0, &c, 2);
+	tab = 1;
 }
 
 void field_deft() {
@@ -127,6 +128,7 @@ void field_deft() {
 	}
 	uint64_t c = 2605;
 	write(0, &c, 2);
+	tab = 1;
 }
 
 void field_test(uint8_t x, uint8_t y) {
